@@ -17,7 +17,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - run: cargo test --feature rgba
+      - run: cargo test --features rgba
       - run: cargo publish --token ${CRATES_TOKEN}
         env:
           CRATES_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
