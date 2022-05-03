@@ -1,41 +1,48 @@
 mod models;
 
-use maikor_vm_core::constants::graphics::{ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT, TILES_PER_ATLAS_ROW};
-use maikor_vm_core::constants::mem::{address, sizes};
-use maikor_vm_core::constants::mem::address::ATLAS1;
-use maikor_vm_core::VM;
 use crate::models::{LayerHeader, Sprite};
+use maikor_vm_core::constants::graphics::{
+    ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT,
+    TILES_PER_ATLAS_ROW,
+};
+use maikor_vm_core::constants::mem::address::ATLAS1;
+use maikor_vm_core::constants::mem::{address, sizes};
+use maikor_vm_core::VM;
 
 pub const PIXEL_SIZE: usize = 4;
 pub const SCREEN_BYTES: usize = SCREEN_PIXELS * PIXEL_SIZE;
 
 pub struct VMHost {
     pub vm: VM,
-    pub fill_color: [u8;3]
+    pub fill_color: [u8; 3],
 }
 
 impl VMHost {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self { vm: VM::new(), fill_color: [0,0,0] }
+        Self {
+            vm: VM::new(),
+            fill_color: [0, 0, 0],
+        }
     }
 }
 
 impl VMHost {
     pub fn pop_test(&mut self) {
-        self.vm.memory[address::PALETTES.0 as usize +12] = 255;
-        self.vm.memory[address::PALETTES.0 as usize +13] = 255;
-        self.vm.memory[address::PALETTES.0 as usize +14] = 255;
+        self.vm.memory[address::PALETTES.0 as usize + 12] = 255;
+        self.vm.memory[address::PALETTES.0 as usize + 13] = 255;
+        self.vm.memory[address::PALETTES.0 as usize + 14] = 255;
         self.vm.memory[address::PALETTES.0 as usize + 3] = 255;
         self.vm.memory[address::PALETTES.0 as usize + 7] = 255;
         self.vm.memory[address::PALETTES.0 as usize + 11] = 255;
         self.vm.memory[address::SPRITE_TABLE.0 as usize] = 10;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize+1] = 10;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize+2] = 0;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize+3] = 0;
-        for i in 0..(ATLAS_TILE_WIDTH*ATLAS_TILE_HEIGHT) {
+        self.vm.memory[address::SPRITE_TABLE.0 as usize + 1] = 10;
+        self.vm.memory[address::SPRITE_TABLE.0 as usize + 2] = 0;
+        self.vm.memory[address::SPRITE_TABLE.0 as usize + 3] = 0;
+        for i in 0..(ATLAS_TILE_WIDTH * ATLAS_TILE_HEIGHT) {
             let offset = i * 2;
             self.vm.memory[address::ATLAS1.0 as usize + offset] = 0x41;
-            self.vm.memory[address::ATLAS1.0 as usize + offset+1] = 0x23;
+            self.vm.memory[address::ATLAS1.0 as usize + offset + 1] = 0x23;
         }
     }
 }
@@ -63,7 +70,8 @@ impl VMHost {
         for layer_id in 0..LAYER_COUNT {
             let header_addr = address::LAYER_HEADERS.0 as usize + (sizes::LAYERS_HEADER * layer_id);
             let _content_addr = address::LAYERS.0 as usize + (sizes::LAYERS_CONTENT * layer_id);
-            let header = LayerHeader::new(&self.vm.memory[header_addr..header_addr + sizes::LAYERS_HEADER]);
+            let header =
+                LayerHeader::new(&self.vm.memory[header_addr..header_addr + sizes::LAYERS_HEADER]);
             if header.is_visible {}
         }
     }
@@ -82,11 +90,19 @@ impl VMHost {
                         let second = self.vm.memory[pixels_idx] & 0x0F;
                         if first > 0 {
                             let first = self.get_palette_color(sprite.palette, first);
-                            format_pixel(first, ((y+sprite.y) * SCREEN_WIDTH + (x*2) + sprite.x) * 4, pixels);
+                            format_pixel(
+                                first,
+                                ((y + sprite.y) * SCREEN_WIDTH + (x * 2) + sprite.x) * 4,
+                                pixels,
+                            );
                         }
                         if second > 0 {
                             let second = self.get_palette_color(sprite.palette, second);
-                            format_pixel(second, ((y+sprite.y) * SCREEN_WIDTH + (x*2) + 1 + sprite.x) * 4, pixels);
+                            format_pixel(
+                                second,
+                                ((y + sprite.y) * SCREEN_WIDTH + (x * 2) + 1 + sprite.x) * 4,
+                                pixels,
+                            );
                         }
                     }
                 }
@@ -98,7 +114,7 @@ impl VMHost {
         let palette_addr = address::PALETTES.0 as usize + sizes::PALETTE * palette;
         let color_addr = palette_addr + 3 * color as usize;
         let colours = &self.vm.memory[color_addr..color_addr + 3];
-        [colours[0],colours[1],colours[2]]
+        [colours[0], colours[1], colours[2]]
     }
 }
 

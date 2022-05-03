@@ -1,12 +1,16 @@
 pub struct LayerHeader {
     pub is_visible: bool,
     pub x_offset: u8,
-    pub y_offset: u8
+    pub y_offset: u8,
 }
 
 impl LayerHeader {
     pub fn new(data: &[u8]) -> Self {
-        Self { is_visible: data[2] & 0b1 == 0b1, x_offset: data[0], y_offset: data[1] }
+        Self {
+            is_visible: data[2] & 0b1 == 0b1,
+            x_offset: data[0],
+            y_offset: data[1],
+        }
     }
 }
 
@@ -19,7 +23,7 @@ pub struct Sprite {
     pub flipped_horz: bool,
     pub palette: usize,
     pub large: bool,
-    pub order: usize
+    pub order: usize,
 }
 
 impl Sprite {
