@@ -1,12 +1,12 @@
 mod models;
 
 use crate::models::{LayerHeader, Sprite};
-use maikor_vm_core::constants::graphics::{
+use maikor_language::constants::{
     ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT,
     TILES_PER_ATLAS_ROW,
 };
-use maikor_vm_core::constants::mem::address::ATLAS1;
-use maikor_vm_core::constants::mem::{address, sizes};
+use maikor_language::mem::address::ATLAS1;
+use maikor_language::mem::{address, sizes};
 use maikor_vm_core::VM;
 
 pub const PIXEL_SIZE: usize = 4;
@@ -28,32 +28,6 @@ impl VMHost {
 }
 
 impl VMHost {
-    pub fn pop_test(&mut self) {
-        self.vm.memory[address::PALETTES.0 as usize + 12] = 255;
-        self.vm.memory[address::PALETTES.0 as usize + 13] = 255;
-        self.vm.memory[address::PALETTES.0 as usize + 14] = 255;
-        self.vm.memory[address::PALETTES.0 as usize + 3] = 255;
-        self.vm.memory[address::PALETTES.0 as usize + 7] = 255;
-        self.vm.memory[address::PALETTES.0 as usize + 11] = 255;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize] = 10;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize + 1] = 10;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize + 2] = 0;
-        self.vm.memory[address::SPRITE_TABLE.0 as usize + 3] = 0;
-        for i in 0..(ATLAS_TILE_WIDTH * ATLAS_TILE_HEIGHT) {
-            let offset = i * 2;
-            self.vm.memory[address::ATLAS1.0 as usize + offset] = 0x41;
-            self.vm.memory[address::ATLAS1.0 as usize + offset + 1] = 0x23;
-        }
-    }
-}
-
-impl VMHost {
-    pub fn run(&mut self) {
-        while self.vm.pc < 50 {
-            self.vm.step();
-        }
-    }
-
     pub fn render(&self, pixels: &mut [u8]) {
         self.clear_screen(pixels);
         self.render_backgrounds(pixels);
@@ -68,22 +42,25 @@ impl VMHost {
 
     fn render_backgrounds(&self, _pixels: &mut [u8]) {
         for layer_id in 0..LAYER_COUNT {
-            let header_addr = address::LAYER_HEADERS.0 as usize + (sizes::LAYERS_HEADER * layer_id);
-            let _content_addr = address::LAYERS.0 as usize + (sizes::LAYERS_CONTENT * layer_id);
-            let header =
-                LayerHeader::new(&self.vm.memory[header_addr..header_addr + sizes::LAYERS_HEADER]);
+            let header_addr =
+                address::LAYER_HEADERS as usize + (sizes::LAYERS_HEADER as usize * layer_id);
+            let _content_addr =
+                address::LAYERS as usize + (sizes::LAYERS_CONTENT as usize * layer_id);
+            let header = LayerHeader::new(
+                &self.vm.memory[header_addr..header_addr + sizes::LAYERS_HEADER as usize],
+            );
             if header.is_visible {}
         }
     }
 
     fn render_sprites(&self, pixels: &mut [u8]) {
         for i in 0..SPRITE_COUNT {
-            let addr = address::SPRITE_TABLE.0 as usize + (sizes::SPRITE * i);
-            let sprite = Sprite::new(&self.vm.memory[addr..addr + sizes::SPRITE]);
+            let addr = address::SPRITE_TABLE as usize + (sizes::SPRITE as usize * i);
+            let sprite = Sprite::new(&self.vm.memory[addr..addr + sizes::SPRITE as usize]);
             if sprite.id < 255 {
                 let atlas_y = sprite.id / TILES_PER_ATLAS_ROW * ATLAS_TILE_HEIGHT;
                 for y in 0..ATLAS_TILE_HEIGHT {
-                    let atlas_row_idx = ATLAS1.0 as usize + (atlas_y * ATLAS_TILE_WIDTH);
+                    let atlas_row_idx = ATLAS1 as usize + (atlas_y * ATLAS_TILE_WIDTH);
                     for x in 0..ATLAS_TILE_WIDTH {
                         let pixels_idx = atlas_row_idx + x;
                         let first = (self.vm.memory[pixels_idx] & 0xF0) >> 4;
@@ -111,7 +88,7 @@ impl VMHost {
     }
 
     fn get_palette_color(&self, palette: usize, color: u8) -> [u8; 3] {
-        let palette_addr = address::PALETTES.0 as usize + sizes::PALETTE * palette;
+        let palette_addr = address::PALETTES as usize + sizes::PALETTE as usize * palette;
         let color_addr = palette_addr + 3 * color as usize;
         let colours = &self.vm.memory[color_addr..color_addr + 3];
         [colours[0], colours[1], colours[2]]
