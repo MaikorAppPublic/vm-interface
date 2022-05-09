@@ -1,5 +1,9 @@
 ## Pre-alpha
 
+### 0.1.3
+
+- Update VM to 0.1.4
+
 ### 0.1.2
 
 - Update vm and language deps
