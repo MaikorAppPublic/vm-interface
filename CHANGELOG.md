@@ -1,5 +1,9 @@
 ## Pre-alpha
 
+### 0.1.2
+
+- Update vm and language deps
+
 ### 0.1.1
 
 - Update core and lang deps
