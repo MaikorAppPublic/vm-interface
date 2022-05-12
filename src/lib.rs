@@ -28,6 +28,12 @@ impl VMHost {
 }
 
 impl VMHost {
+    pub fn reset(&mut self) {
+        self.vm = VM::new();
+    }
+}
+
+impl VMHost {
     pub fn render(&self, pixels: &mut [u8]) {
         self.clear_screen(pixels);
         self.render_backgrounds(pixels);
