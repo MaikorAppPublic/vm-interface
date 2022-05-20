@@ -1,5 +1,10 @@
 ## Pre-alpha
 
+### 0.1.5
+- Update dependencies
+  - Language to 0.1.19
+  - Core to 0.1.6
+
 ### 0.1.4
 
 - *BREAKING CHANGE*

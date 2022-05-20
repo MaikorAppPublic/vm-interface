@@ -1,12 +1,12 @@
 mod models;
 
 use crate::models::{LayerHeader, Sprite};
-use maikor_language::constants::{
+use maikor_platform::constants::{
     ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT,
     TILES_PER_ATLAS_ROW,
 };
-use maikor_language::mem::address::ATLAS1;
-use maikor_language::mem::{address, sizes};
+use maikor_platform::mem::address::ATLAS1;
+use maikor_platform::mem::{address, sizes};
 use maikor_vm_core::VM;
 
 pub const PIXEL_SIZE: usize = 4;
