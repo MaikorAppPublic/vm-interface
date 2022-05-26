@@ -81,7 +81,7 @@ impl VMHost {
 
     fn clear_screen(&self, pixels: &mut [u8]) {
         for i in 0..SCREEN_PIXELS {
-            format_pixel(self.fill_color, i * 4, pixels);
+            format_pixel(self.fill_color, false, i * 4, pixels);
         }
     }
 
@@ -99,37 +99,119 @@ impl VMHost {
     }
 
     fn render_sprites(&self, pixels: &mut [u8]) {
-        for i in 0..SPRITE_COUNT {
+        for i in 0..=SPRITE_COUNT {
             let addr = address::SPRITE_TABLE as usize + (sizes::SPRITE as usize * i);
-            let sprite = Sprite::new(&self.vm.memory[addr..addr + sizes::SPRITE as usize]);
-            if sprite.id < 255 {
-                let atlas_y = sprite.id / TILES_PER_ATLAS_ROW * ATLAS_TILE_HEIGHT;
-                for y in 0..ATLAS_TILE_HEIGHT {
-                    let atlas_row_idx = ATLAS1 as usize + (atlas_y * ATLAS_TILE_WIDTH);
-                    for x in 0..ATLAS_TILE_WIDTH {
-                        let pixels_idx = atlas_row_idx + x;
-                        let first = (self.vm.memory[pixels_idx] & 0xF0) >> 4;
-                        let second = self.vm.memory[pixels_idx] & 0x0F;
-                        if first > 0 {
-                            let first = self.get_palette_color(sprite.palette, first);
-                            format_pixel(
-                                first,
-                                ((y + sprite.y) * SCREEN_WIDTH + (x * 2) + sprite.x) * 4,
-                                pixels,
-                            );
-                        }
-                        if second > 0 {
-                            let second = self.get_palette_color(sprite.palette, second);
-                            format_pixel(
-                                second,
-                                ((y + sprite.y) * SCREEN_WIDTH + (x * 2) + 1 + sprite.x) * 4,
-                                pixels,
-                            );
-                        }
-                    }
+            let sprite = Sprite::from_bytes(&self.vm.memory[addr..addr + sizes::SPRITE as usize]);
+            if sprite.enabled {
+                match (sprite.flip_h, sprite.flip_v) {
+                    (false, false) => self.render_sprite(pixels, sprite),
+                    (true, false) => self.render_sprite_horz_flipped(pixels, sprite),
+                    (false, true) => self.render_sprite_vert_flipped(pixels, sprite),
+                    (true, true) => self.render_sprite_horz_vert_flipped(pixels, sprite),
                 }
             }
         }
+    }
+
+    fn render_sprite(&self, pixels: &mut [u8], sprite: Sprite) {
+        let mut x = 0;
+        let mut y = 0;
+        for i in 0..ATLAS_TILE_PIXELS {
+            let (color1, color2) = self.get_colors(&sprite, i);
+            self.set_pixel(pixels, &sprite, x * 2, y, color1, color2);
+            x += 1;
+            if x >= ATLAS_TILE_WIDTH {
+                x = 0;
+                y += 1;
+            }
+        }
+    }
+
+    fn render_sprite_horz_vert_flipped(&self, pixels: &mut [u8], sprite: Sprite) {
+        let mut x = 0;
+        let mut y = 0;
+        for i in 0..ATLAS_TILE_PIXELS {
+            let (color1, color2) = self.get_colors(&sprite, i);
+            self.set_pixel(
+                pixels,
+                &sprite,
+                TILE_WIDTH - 2 - x * 2,
+                TILE_HEIGHT - 1 - y,
+                color2,
+                color1,
+            );
+            x += 1;
+            if x >= ATLAS_TILE_WIDTH {
+                x = 0;
+                y += 1;
+            }
+        }
+    }
+
+    fn render_sprite_horz_flipped(&self, pixels: &mut [u8], sprite: Sprite) {
+        let mut x = 0;
+        let mut y = 0;
+        for i in 0..ATLAS_TILE_PIXELS {
+            let (color1, color2) = self.get_colors(&sprite, i);
+            self.set_pixel(pixels, &sprite, TILE_WIDTH - 2 - x * 2, y, color2, color1);
+            x += 1;
+            if x >= ATLAS_TILE_WIDTH {
+                x = 0;
+                y += 1;
+            }
+        }
+    }
+
+    fn render_sprite_vert_flipped(&self, pixels: &mut [u8], sprite: Sprite) {
+        let mut x = 0;
+        let mut y = 0;
+        for i in 0..ATLAS_TILE_PIXELS {
+            let (color1, color2) = self.get_colors(&sprite, i);
+            self.set_pixel(pixels, &sprite, x * 2, TILE_HEIGHT - 1 - y, color1, color2);
+            x += 1;
+            if x >= ATLAS_TILE_WIDTH {
+                x = 0;
+                y += 1;
+            }
+        }
+    }
+
+    fn set_pixel(
+        &self,
+        pixels: &mut [u8],
+        sprite: &Sprite,
+        x: usize,
+        y: usize,
+        color1: [u8; 3],
+        color2: [u8; 3],
+    ) {
+        let scr_x = x + sprite.x;
+        let scr_y = y + sprite.y;
+        let idx = (scr_x + scr_y * SCREEN_WIDTH) * PIXEL_SIZE;
+        if color1 != TRANSPARENT {
+            format_pixel(color1, sprite.half_alpha, idx, pixels);
+        }
+        if color2 != TRANSPARENT {
+            format_pixel(color2, sprite.half_alpha, idx + PIXEL_SIZE, pixels);
+        }
+    }
+
+    fn get_colors(&self, sprite: &Sprite, pixel: usize) -> ([u8; 3], [u8; 3]) {
+        let atlas = match sprite.atlas {
+            0 => ATLAS1,
+            1 => ATLAS2,
+            2 => ATLAS3,
+            4 => ATLAS4,
+            _ => panic!("Impossible atlas value: {}", sprite.atlas),
+        };
+        let colors = self.vm.memory[atlas as usize + sprite.id * ATLAS_TILE_PIXELS + pixel];
+        let first = (colors & 0xF0) >> 4;
+        let second = colors & 0x0F;
+
+        (
+            self.get_palette_color(sprite.palette, first),
+            self.get_palette_color(sprite.palette, second),
+        )
     }
 
     fn get_palette_color(&self, palette: usize, color: u8) -> [u8; 3] {
@@ -141,17 +223,34 @@ impl VMHost {
 }
 
 #[cfg(feature = "argb")]
-fn format_pixel(colour: [u8; 3], start: usize, pixels: &mut [u8]) {
+fn format_pixel(colour: [u8; 3], half_alpha: bool, start: usize, pixels: &mut [u8]) {
     pixels[start] = 255;
-    pixels[start + 1] = colour[0];
-    pixels[start + 2] = colour[1];
-    pixels[start + 3] = colour[2];
+    if half_alpha {
+        pixels[start + 1] = mix(pixels[start + 1], colour[0]);
+        pixels[start + 2] = mix(pixels[start + 2], colour[1]);
+        pixels[start + 3] = mix(pixels[start + 3], colour[2]);
+    } else {
+        pixels[start + 1] = colour[0];
+        pixels[start + 2] = colour[1];
+        pixels[start + 3] = colour[2];
+    }
 }
 
 #[cfg(feature = "rgba")]
-fn format_pixel(colour: [u8; 3], start: usize, pixels: &mut [u8]) {
-    pixels[start] = colour[0];
-    pixels[start + 1] = colour[1];
-    pixels[start + 2] = colour[2];
+fn format_pixel(colour: [u8; 3], half_alpha: bool, start: usize, pixels: &mut [u8]) {
+    if half_alpha {
+        pixels[start] = mix(pixels[start], colour[0]);
+        pixels[start + 1] = mix(pixels[start + 1], colour[1]);
+        pixels[start + 2] = mix(pixels[start + 2], colour[2]);
+    } else {
+        pixels[start] = colour[0];
+        pixels[start + 1] = colour[1];
+        pixels[start + 2] = colour[2];
+    }
     pixels[start + 3] = 255;
+}
+
+#[inline(always)]
+const fn mix(lhs: u8, rhs: u8) -> u8 {
+    lhs.saturating_add(rhs / 3 * 2)
 }
