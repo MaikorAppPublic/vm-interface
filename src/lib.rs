@@ -29,7 +29,45 @@ impl VMHost {
 
 impl VMHost {
     pub fn reset(&mut self) {
-        self.vm = VM::new();
+        self.vm.registers.fill(0);
+        self.vm.registers[8] = FLG_DEFAULT;
+        self.vm.memory[address::RAM as usize..(address::RAM + sizes::RAM_BANK) as usize]
+            .as_mut()
+            .fill(0);
+        for bank in &mut self.vm.ram_banks {
+            bank.fill(0);
+        }
+        self.vm.error = None;
+        self.vm.pc = 0;
+        self.vm.halted = false;
+        self.vm.op_executed = 0;
+        self.vm.cycles_executed = 0;
+        self.vm.save_dirty_flag.fill(false);
+        self.vm.sound.reset();
+    }
+}
+
+impl VMHost {
+    pub fn execute(&mut self) {
+        let mut cycles = 0;
+        for _ in 0..10000 {
+            cycles += self.vm.step();
+            self.vm.memory[address::RAND as usize] = self.rng.generate();
+            self.cmdr.update(&mut self.vm.memory);
+        }
+        self.vm.sound.do_cycle(cycles as u32);
+        self.check_for_input_changes();
+    }
+
+    fn check_for_input_changes(&mut self) {
+        let input_bytes = self.input_state.as_bytes();
+        if self.vm.memory[address::INPUT as usize] != input_bytes[0]
+            || self.vm.memory[address::INPUT as usize + 1] != input_bytes[1]
+        {
+            self.vm.memory[address::INPUT as usize] = input_bytes[0];
+            self.vm.memory[address::INPUT as usize + 1] = input_bytes[1];
+            self.vm.trigger_interrupt(IRQ_CONTROLLER);
+        }
     }
 }
 
@@ -38,6 +76,7 @@ impl VMHost {
         self.clear_screen(pixels);
         self.render_backgrounds(pixels);
         self.render_sprites(pixels);
+        //self.render_controller_sprites(pixel);
     }
 
     fn clear_screen(&self, pixels: &mut [u8]) {
