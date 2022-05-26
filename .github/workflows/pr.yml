@@ -1,11 +1,9 @@
 on:
-  push:
-    tags:
-      - v*
+  pull_request:
 
 jobs:
-  publish:
-    name: Publish
+  test:
+    name: test
     # Specify OS
     runs-on: ubuntu-latest
     steps:
@@ -21,6 +19,3 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets --features rgba -- -D clippy::all
       - run: cargo test --features rgba
-      - run: cargo publish --token ${CRATES_TOKEN} --features rgba
-        env:
-          CRATES_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
