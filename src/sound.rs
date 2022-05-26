@@ -37,6 +37,7 @@ impl CpalPlayer {
                 break;
             }
         }
+        #[allow(clippy::question_mark)] //very weird syntax
         if supported_config.is_none() {
             return None;
         }
@@ -117,6 +118,6 @@ impl AudioPlayer for CpalPlayer {
     }
 
     fn underflowed(&self) -> bool {
-        (*self.buffer.lock().unwrap()).len() == 0
+        (*self.buffer.lock().unwrap()).is_empty()
     }
 }

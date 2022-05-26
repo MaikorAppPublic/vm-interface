@@ -1,5 +1,10 @@
 ## Pre-alpha
 
+### 0.1.6
+- Add support for half alpha and flipped sprites
+- Add execute method 
+- Add sound support
+
 ### 0.1.5
 - Update dependencies
   - Language to 0.1.19

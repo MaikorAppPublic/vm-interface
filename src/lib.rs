@@ -47,7 +47,7 @@ pub struct Input {
 
 impl Input {
     fn as_bytes(&mut self) -> [u8; 2] {
-        return if let Some(value) = self.cached {
+        if let Some(value) = self.cached {
             value
         } else {
             let value = [
@@ -57,7 +57,7 @@ impl Input {
             ];
             self.cached = Some(value);
             value
-        };
+        }
     }
 }
 
