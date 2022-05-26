@@ -1,28 +1,79 @@
-mod models;
+mod mem_cmdr;
+mod sound;
 
-use crate::models::{LayerHeader, Sprite};
+use crate::mem_cmdr::MemoryCommander;
+use crate::sound::CpalPlayer;
+use cpal::Stream;
 use maikor_platform::constants::{
     ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT,
-    TILES_PER_ATLAS_ROW,
+    TILE_HEIGHT, TILE_WIDTH,
 };
-use maikor_platform::mem::address::ATLAS1;
+use maikor_platform::input;
+use maikor_platform::mem::address::{ATLAS1, ATLAS2, ATLAS3, ATLAS4};
+use maikor_platform::mem::interrupt_flags::IRQ_CONTROLLER;
 use maikor_platform::mem::{address, sizes};
-use maikor_vm_core::VM;
+use maikor_platform::models::{Byteable, LayerHeader, Sprite};
+use maikor_platform::registers::FLG_DEFAULT;
+use maikor_vm_core::{AudioPlayer, VM};
+use nanorand::{Rng, WyRand};
 
 pub const PIXEL_SIZE: usize = 4;
 pub const SCREEN_BYTES: usize = SCREEN_PIXELS * PIXEL_SIZE;
+pub const ATLAS_TILE_PIXELS: usize = ATLAS_TILE_WIDTH * ATLAS_TILE_HEIGHT;
+pub const TRANSPARENT: [u8; 3] = [0, 0, 0];
 
 pub struct VMHost {
     pub vm: VM,
+    pub stream: Stream,
+    pub cmdr: MemoryCommander,
     pub fill_color: [u8; 3],
+    pub rng: WyRand,
+    pub input_state: Input,
+}
+
+#[derive(Default, Debug)]
+pub struct Input {
+    a: bool,
+    b: bool,
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+    x: bool,
+    y: bool,
+    start: bool,
+    cached: Option<[u8; 2]>,
+}
+
+impl Input {
+    fn as_bytes(&mut self) -> [u8; 2] {
+        return if let Some(value) = self.cached {
+            value
+        } else {
+            let value = [
+                if self.up { input::mask::UP } else { 0 }
+                    | if self.down { input::mask::DOWN } else { 0 },
+                if self.start { input::mask::START } else { 0 },
+            ];
+            self.cached = Some(value);
+            value
+        };
+    }
 }
 
 impl VMHost {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            vm: VM::new(),
-            fill_color: [0, 0, 0],
+    pub fn new() -> Result<Self, String> {
+        match CpalPlayer::get() {
+            Some((player, stream)) => Ok(Self {
+                vm: VM::new(Box::new(player)),
+                stream,
+                cmdr: MemoryCommander::default(),
+                fill_color: [0, 0, 0],
+                rng: WyRand::new(),
+                input_state: Input::default(),
+            }),
+            None => Err(String::from("Unable to create audio player")),
         }
     }
 }
@@ -91,10 +142,10 @@ impl VMHost {
                 address::LAYER_HEADERS as usize + (sizes::LAYERS_HEADER as usize * layer_id);
             let _content_addr =
                 address::LAYERS as usize + (sizes::LAYERS_CONTENT as usize * layer_id);
-            let header = LayerHeader::new(
+            let header = LayerHeader::from_bytes(
                 &self.vm.memory[header_addr..header_addr + sizes::LAYERS_HEADER as usize],
             );
-            if header.is_visible {}
+            if header.enabled {}
         }
     }
 
