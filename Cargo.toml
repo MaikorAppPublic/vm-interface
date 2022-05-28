@@ -1,6 +1,6 @@
 [package]
 name = "maikor-vm-interface"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 authors = ["Ray Britton <raybritton@pm.me>"]
 description = "Interface for VM (simulates hardware)"
@@ -17,7 +17,7 @@ argb = []
 rgba = []
 
 [dependencies]
-maikor-vm-core = "0.1.9"
-maikor-platform = "0.1.22"
+maikor-vm-core = "0.1.10"
+maikor-platform = "0.1.25"
 nanorand = "0.7.0"
 cpal = "0.13.5"

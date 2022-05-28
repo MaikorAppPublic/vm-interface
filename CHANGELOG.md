@@ -1,5 +1,8 @@
 ## Pre-alpha
 
+### 0.1.7
+- Update deps
+
 ### 0.1.6
 - Add support for half alpha and flipped sprites
 - Add execute method 

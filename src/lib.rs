@@ -29,6 +29,8 @@ pub struct VMHost {
     pub fill_color: [u8; 3],
     pub rng: WyRand,
     pub input_state: Input,
+    pub on_save_invalidated: Box<fn(usize)>,
+    pub on_halt: Box<fn(Option<String>)>,
 }
 
 #[derive(Default, Debug)]
@@ -63,7 +65,10 @@ impl Input {
 
 impl VMHost {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Result<Self, String> {
+    pub fn new(
+        on_save_invalidated: Box<fn(usize)>,
+        on_halt: Box<fn(Option<String>)>,
+    ) -> Result<Self, String> {
         match CpalPlayer::get() {
             Some((player, stream)) => Ok(Self {
                 vm: VM::new(Box::new(player)),
@@ -72,6 +77,8 @@ impl VMHost {
                 fill_color: [0, 0, 0],
                 rng: WyRand::new(),
                 input_state: Input::default(),
+                on_save_invalidated,
+                on_halt,
             }),
             None => Err(String::from("Unable to create audio player")),
         }
