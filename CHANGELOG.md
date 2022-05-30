@@ -1,5 +1,8 @@
 ## Pre-alpha
 
+### 0.1.9
+- Update core dep
+
 ### 0.1.8
 - Add basic timing control
 
