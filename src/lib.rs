@@ -3,10 +3,11 @@ mod sound;
 
 use crate::mem_cmdr::MemoryCommander;
 use crate::sound::CpalPlayer;
+use cpal::traits::StreamTrait;
 use cpal::Stream;
 use maikor_platform::constants::{
-    ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_PIXELS, SCREEN_WIDTH, SPRITE_COUNT,
-    TILE_HEIGHT, TILE_WIDTH,
+    ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH,
+    SPRITE_COUNT, TILE_HEIGHT, TILE_WIDTH,
 };
 use maikor_platform::input;
 use maikor_platform::mem::address::{ATLAS1, ATLAS2, ATLAS3, ATLAS4};
@@ -14,13 +15,16 @@ use maikor_platform::mem::interrupt_flags::IRQ_CONTROLLER;
 use maikor_platform::mem::{address, sizes};
 use maikor_platform::models::{Byteable, LayerHeader, Sprite};
 use maikor_platform::registers::FLG_DEFAULT;
-use maikor_vm_core::{AudioPlayer, VM};
+use maikor_vm_core::VM;
 use nanorand::{Rng, WyRand};
+use std::ops::Add;
+use std::time::{Duration, Instant};
 
 pub const PIXEL_SIZE: usize = 4;
 pub const SCREEN_BYTES: usize = SCREEN_PIXELS * PIXEL_SIZE;
 pub const ATLAS_TILE_PIXELS: usize = ATLAS_TILE_WIDTH * ATLAS_TILE_HEIGHT;
 pub const TRANSPARENT: [u8; 3] = [0, 0, 0];
+pub const CYCLES_PER_FRAME: isize = 200000;
 
 pub struct VMHost {
     pub vm: VM,
@@ -31,20 +35,22 @@ pub struct VMHost {
     pub input_state: Input,
     pub on_save_invalidated: Box<fn(usize)>,
     pub on_halt: Box<fn(Option<String>)>,
+    pub next_frame: Instant,
+    pub cycles_remaining: isize,
 }
 
 #[derive(Default, Debug)]
 pub struct Input {
-    a: bool,
-    b: bool,
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
-    x: bool,
-    y: bool,
-    start: bool,
-    cached: Option<[u8; 2]>,
+    pub a: bool,
+    pub b: bool,
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+    pub x: bool,
+    pub y: bool,
+    pub start: bool,
+    pub cached: Option<[u8; 2]>,
 }
 
 impl Input {
@@ -79,6 +85,8 @@ impl VMHost {
                 input_state: Input::default(),
                 on_save_invalidated,
                 on_halt,
+                cycles_remaining: CYCLES_PER_FRAME,
+                next_frame: Instant::now(),
             }),
             None => Err(String::from("Unable to create audio player")),
         }
@@ -102,14 +110,34 @@ impl VMHost {
         self.vm.cycles_executed = 0;
         self.vm.save_dirty_flag.fill(false);
         self.vm.sound.reset();
+        self.cycles_remaining = CYCLES_PER_FRAME;
+        self.next_frame = Instant::now();
     }
 }
 
 impl VMHost {
     pub fn execute(&mut self) {
+        if self.cycles_remaining < 0 {
+            if self.next_frame <= Instant::now() {
+                self.cycles_remaining = CYCLES_PER_FRAME;
+                self.next_frame = Instant::now().add(Duration::from_millis(16));
+            } else {
+                return;
+            }
+        }
         let mut cycles = 0;
         for _ in 0..10000 {
             cycles += self.vm.step();
+            self.cycles_remaining -= cycles as isize;
+            if self.cycles_remaining < 0 {
+                break;
+            }
+            if self.vm.halted {
+                let error = self.vm.error.clone();
+                (self.on_halt)(error);
+                let _ignore_result = self.stream.pause();
+                return;
+            }
             self.vm.memory[address::RAND as usize] = self.rng.generate();
             self.cmdr.update(&mut self.vm.memory);
         }
@@ -243,8 +271,11 @@ impl VMHost {
         color1: [u8; 3],
         color2: [u8; 3],
     ) {
-        let scr_x = x + sprite.x;
-        let scr_y = y + sprite.y;
+        let scr_x = (x + sprite.x).saturating_sub(8);
+        let scr_y = (y + sprite.y).saturating_sub(8);
+        if scr_x >= SCREEN_WIDTH || scr_y >= SCREEN_HEIGHT {
+            return;
+        }
         let idx = (scr_x + scr_y * SCREEN_WIDTH) * PIXEL_SIZE;
         if color1 != TRANSPARENT {
             format_pixel(color1, sprite.half_alpha, idx, pixels);
