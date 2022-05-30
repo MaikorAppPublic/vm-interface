@@ -1,5 +1,8 @@
 ## Pre-alpha
 
+### 0.1.8
+- Add basic timing control
+
 ### 0.1.7
 - Update deps
 
