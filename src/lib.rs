@@ -3,8 +3,6 @@ mod sound;
 
 use crate::mem_cmdr::MemoryCommander;
 use crate::sound::CpalPlayer;
-use cpal::traits::StreamTrait;
-use cpal::Stream;
 use maikor_platform::constants::{
     ATLAS_TILE_HEIGHT, ATLAS_TILE_WIDTH, LAYER_COUNT, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH,
     SPRITE_COUNT, TILE_HEIGHT, TILE_WIDTH,
