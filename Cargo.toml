@@ -17,7 +17,7 @@ argb = []
 rgba = []
 
 [dependencies]
-maikor-vm-core = "0.1.14"
+maikor-vm-core = "0.1.15"
 maikor-platform = "0.1.27"
 nanorand = "0.7.0"
 cpal = "0.13.5"

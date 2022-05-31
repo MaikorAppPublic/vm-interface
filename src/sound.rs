@@ -1,6 +1,10 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use maikor_vm_core::AudioPlayer;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::thread::{sleep, JoinHandle};
+use std::time::Duration;
 
 pub struct CpalPlayer {
     buffer: Arc<Mutex<Vec<(f32, f32)>>>,
@@ -8,7 +12,7 @@ pub struct CpalPlayer {
 }
 
 impl CpalPlayer {
-    pub fn get() -> Option<(CpalPlayer, cpal::Stream)> {
+    pub fn get() -> Option<(CpalPlayer, Arc<AtomicBool>, JoinHandle<()>)> {
         let device = match cpal::default_host().default_output_device() {
             Some(e) => e,
             None => return None,
@@ -57,34 +61,45 @@ impl CpalPlayer {
             sample_rate: config.sample_rate.0,
         };
 
-        let stream = match sample_format {
-            cpal::SampleFormat::F32 => device.build_output_stream(
-                &config,
-                move |data: &mut [f32], _callback_info: &cpal::OutputCallbackInfo| {
-                    cpal_thread(data, &stream_buffer)
-                },
-                err_fn,
-            ),
-            cpal::SampleFormat::U16 => device.build_output_stream(
-                &config,
-                move |data: &mut [u16], _callback_info: &cpal::OutputCallbackInfo| {
-                    cpal_thread(data, &stream_buffer)
-                },
-                err_fn,
-            ),
-            cpal::SampleFormat::I16 => device.build_output_stream(
-                &config,
-                move |data: &mut [i16], _callback_info: &cpal::OutputCallbackInfo| {
-                    cpal_thread(data, &stream_buffer)
-                },
-                err_fn,
-            ),
-        }
-        .unwrap();
+        let keep_alive = Arc::new(AtomicBool::new(true));
+        let thread_keep_alive = keep_alive.clone();
 
-        stream.play().unwrap();
+        let handle = thread::spawn(move || {
+            let stream = match sample_format {
+                cpal::SampleFormat::F32 => device.build_output_stream(
+                    &config,
+                    move |data: &mut [f32], _callback_info: &cpal::OutputCallbackInfo| {
+                        cpal_thread(data, &stream_buffer)
+                    },
+                    err_fn,
+                ),
+                cpal::SampleFormat::U16 => device.build_output_stream(
+                    &config,
+                    move |data: &mut [u16], _callback_info: &cpal::OutputCallbackInfo| {
+                        cpal_thread(data, &stream_buffer)
+                    },
+                    err_fn,
+                ),
+                cpal::SampleFormat::I16 => device.build_output_stream(
+                    &config,
+                    move |data: &mut [i16], _callback_info: &cpal::OutputCallbackInfo| {
+                        cpal_thread(data, &stream_buffer)
+                    },
+                    err_fn,
+                ),
+            }
+            .unwrap();
 
-        Some((player, stream))
+            stream.play().unwrap();
+
+            while thread_keep_alive.load(Ordering::SeqCst) {
+                sleep(Duration::from_millis(1));
+            }
+
+            eprintln!("Audio stream thread died");
+        });
+
+        Some((player, keep_alive, handle))
     }
 }
 

@@ -18,17 +18,21 @@ use maikor_platform::registers::FLG_DEFAULT;
 use maikor_vm_core::VM;
 use nanorand::{Rng, WyRand};
 use std::ops::Add;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 pub const PIXEL_SIZE: usize = 4;
 pub const SCREEN_BYTES: usize = SCREEN_PIXELS * PIXEL_SIZE;
 pub const ATLAS_TILE_PIXELS: usize = ATLAS_TILE_WIDTH * ATLAS_TILE_HEIGHT;
 pub const TRANSPARENT: [u8; 3] = [0, 0, 0];
-pub const CYCLES_PER_FRAME: isize = 200000;
+pub const CYCLES_PER_FRAME: usize = 200000;
 
 pub struct VMHost {
     pub vm: VM,
-    pub stream: Stream,
+    pub keep_alive: Arc<AtomicBool>,
+    pub stream_handle: Option<JoinHandle<()>>,
     pub cmdr: MemoryCommander,
     pub fill_color: [u8; 3],
     pub rng: WyRand,
@@ -36,7 +40,6 @@ pub struct VMHost {
     pub on_save_invalidated: Box<fn(usize)>,
     pub on_halt: Box<fn(Option<String>)>,
     pub next_frame: Instant,
-    pub cycles_remaining: isize,
 }
 
 #[derive(Default, Debug)]
@@ -76,16 +79,16 @@ impl VMHost {
         on_halt: Box<fn(Option<String>)>,
     ) -> Result<Self, String> {
         match CpalPlayer::get() {
-            Some((player, stream)) => Ok(Self {
+            Some((player, keep_alive, handle)) => Ok(Self {
                 vm: VM::new(Box::new(player)),
-                stream,
+                keep_alive,
+                stream_handle: Some(handle),
                 cmdr: MemoryCommander::default(),
                 fill_color: [0, 0, 0],
                 rng: WyRand::new(),
                 input_state: Input::default(),
                 on_save_invalidated,
                 on_halt,
-                cycles_remaining: CYCLES_PER_FRAME,
                 next_frame: Instant::now(),
             }),
             None => Err(String::from("Unable to create audio player")),
@@ -110,39 +113,35 @@ impl VMHost {
         self.vm.cycles_executed = 0;
         self.vm.save_dirty_flag.fill(false);
         self.vm.sound.reset();
-        self.cycles_remaining = CYCLES_PER_FRAME;
         self.next_frame = Instant::now();
     }
 }
 
 impl VMHost {
     pub fn execute(&mut self) {
-        if self.cycles_remaining < 0 {
-            if self.next_frame <= Instant::now() {
-                self.cycles_remaining = CYCLES_PER_FRAME;
-                self.next_frame = Instant::now().add(Duration::from_millis(16));
-            } else {
-                return;
-            }
+        if self.next_frame <= Instant::now() {
+            self.next_frame = Instant::now().add(Duration::from_millis(16));
+        } else {
+            return;
         }
-        let mut cycles = 0;
-        for _ in 0..10000 {
-            cycles += self.vm.step();
-            self.cycles_remaining -= cycles as isize;
-            if self.cycles_remaining < 0 {
-                break;
-            }
+        let mut cycles: usize = 0;
+        while cycles < CYCLES_PER_FRAME {
+            let cost = self.vm.step();
+            cycles += cost;
+            self.vm.sound.do_cycle(cost as u32);
+            self.check_for_input_changes();
             if self.vm.halted {
                 let error = self.vm.error.clone();
                 (self.on_halt)(error);
-                let _ignore_result = self.stream.pause();
+                self.keep_alive.store(false, Ordering::SeqCst);
+                if let Some(handle) = self.stream_handle.take() {
+                    let _ = handle.join();
+                }
                 return;
             }
             self.vm.memory[address::RAND as usize] = self.rng.generate();
             self.cmdr.update(&mut self.vm.memory);
         }
-        self.vm.sound.do_cycle(cycles as u32);
-        self.check_for_input_changes();
     }
 
     fn check_for_input_changes(&mut self) {
