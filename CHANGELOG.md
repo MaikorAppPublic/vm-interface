@@ -1,5 +1,9 @@
 ## Pre-alpha
 
+### 0.1.10
+- Update core dep
+- Move sound to another thread to allow static VMs
+
 ### 0.1.9
 - Update core dep
 
